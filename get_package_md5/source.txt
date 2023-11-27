@@ -1,0 +1,5 @@
+https://mirrors.ustc.edu.cn/alpine
+https://mirrors.ustc.edu.cn/centos
+https://mirrors.ustc.edu.cn/debian/pool
+https://mirrors.ustc.edu.cn/archlinux/pool
+https://mirrors.ustc.edu.cn/ubuntu/pool

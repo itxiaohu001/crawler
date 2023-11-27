@@ -12,7 +12,7 @@ import (
 func main() {
 	p := flags.LoadParams()
 
-	c := collector.NewCollector(DefaultHttpCli(), p.Tool, p.Delay)
+	c := collector.NewCollector(DefaultHttpCli(), p.Suffix, p.Tool, p.Delay)
 	if err := c.Visit(p.Url); err != nil {
 		log.Fatal(err)
 	}

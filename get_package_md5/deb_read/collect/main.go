@@ -7,17 +7,21 @@ import (
 	"compress/gzip"
 	"crypto/md5"
 	"encoding/hex"
+	"encoding/json"
 	"flag"
 	"fmt"
-	"goLearning/get_package_md5/model"
-	"goLearning/get_package_md5/utils"
+	"get_package_md5/model"
+	"get_package_md5/utils"
 	"io"
 	"io/fs"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/blakesmith/ar"
 	"github.com/h2non/filetype"
@@ -33,8 +37,24 @@ var (
 	InputDir       = ""
 	RootDir        = ""
 	MaxConcurrency int
-	logFile        = "error_log"
 )
+
+const (
+	_debSuffix         = "deb"
+	_historyFile       = "history.log"
+	_statisticSavePath = "statistics.log"
+	_errorLog          = "error.log"
+)
+
+// todo:添加history文件
+// todo:hash碰撞统计
+// todo:分析程序被终止原因
+
+type NumPaths struct {
+	HashMd5 string
+	Num     int
+	Paths   []string
+}
 
 func init() {
 	flag.StringVar(&RootDir, "o", "", "指定json输出目录")
@@ -51,47 +71,103 @@ func init() {
 
 	_, err := os.Stat(RootDir)
 	if err != nil {
-		if e := os.MkdirAll(RootDir, 0755); e != nil {
+		if e := os.MkdirAll(RootDir, 0644); e != nil {
 			log.Fatal(e)
 		}
 	}
 }
 
+type Parser struct {
+	targetDir         string
+	outDir            string
+	historyFile       string
+	statisticSavePath string
+	errorLog          string
+	historyInfo       map[string]struct{}
+	statisticalInfo   map[string]NumPaths
+	maxConcurrency    int
+	wg                sync.WaitGroup
+	mu                sync.Mutex
+}
+
+func NewParser(targetDir, outDir string, max int) (*Parser, error) {
+	hi := make(map[string]struct{})
+
+	log.Printf("\nload history...\n")
+	f, err := os.OpenFile(_historyFile, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0644)
+	if err != nil {
+		return nil, errors2.WithMessagef(err, "open file %s", _historyFile)
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		hi[strings.TrimSpace(sc.Text())] = struct{}{}
+	}
+	log.Printf("load history success,%d records in all", len(hi))
+
+	return &Parser{
+		targetDir:         targetDir,
+		outDir:            outDir,
+		maxConcurrency:    max,
+		historyFile:       _historyFile,
+		statisticSavePath: _statisticSavePath,
+		errorLog:          _errorLog,
+		historyInfo:       hi,
+		statisticalInfo:   map[string]NumPaths{},
+		wg:                sync.WaitGroup{},
+		mu:                sync.Mutex{},
+	}, nil
+}
+
 func main() {
-	if err := WalkDirForDebPkg(InputDir); err != nil {
-		log.Println(err)
+	parser, _ := NewParser(InputDir, RootDir, MaxConcurrency)
+	defer func() {
+		if err := parser.saveStatisticalInfo(); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT)
+	go func() {
+		<-sigs
+		if parser != nil {
+			parser.saveStatisticalInfo()
+		}
+		os.Exit(0)
+	}()
+
+	if err := parser.WalkDirForDebPkg(); err != nil {
+		log.Fatal(err)
 	}
 }
 
 // WalkDirForDebPkg 遍历文件夹，解析pkg
-func WalkDirForDebPkg(dir string) error {
-	var wg sync.WaitGroup
-	semaphore := make(chan struct{}, MaxConcurrency)
+func (p *Parser) WalkDirForDebPkg() error {
+	semaphore := make(chan struct{}, p.maxConcurrency)
 
-	filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		wg.Add(1)
+	filepath.WalkDir(p.targetDir, func(path string, d fs.DirEntry, err error) error {
+		p.wg.Add(1)
 		semaphore <- struct{}{}
 
 		go func(path string, d fs.DirEntry) {
 			defer func() {
-				wg.Done()
+				p.wg.Done()
 				<-semaphore
 			}()
+
+			if _, ok := p.historyInfo[path]; ok {
+				return
+			}
 			if d.IsDir() {
 				return
 			}
-			// 仅处理.deb .udeb等文件
-			if !strings.HasSuffix(d.Name(), "deb") {
+			if !strings.HasSuffix(d.Name(), _debSuffix) {
 				return
 			}
-			pkg, err := readDeb(path)
-			if err != nil {
-				utils.RecordErrors(err, logFile)
-				return
-			}
-			err = saveInto(pkg, filepath.Join(RootDir, makeNestDir(path)))
-			if err != nil {
-				utils.RecordErrors(err, logFile)
+
+			if err := p.ReadDeb(path); err != nil {
+				p.recordError(errors2.WithMessagef(err, "read %s", path))
 				return
 			}
 		}(path, d)
@@ -99,8 +175,115 @@ func WalkDirForDebPkg(dir string) error {
 		return nil
 	})
 
-	wg.Wait()
+	p.wg.Wait()
 	return nil
+}
+
+func (p *Parser) record(pkg *model.DebPkg, fp string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if pkg == nil {
+		return nil
+	}
+
+	f, err := os.OpenFile(p.historyFile, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
+	if err != nil {
+		return errors2.WithMessagef(err, "open file %s", p.historyFile)
+	}
+	defer f.Close()
+	_, _ = f.WriteString(fp + "\n")
+
+	for k, v := range pkg.Hashes {
+		np := p.statisticalInfo[k]
+		np.HashMd5 = k
+		np.Num++
+		np.Paths = append(np.Paths, fp+"_"+v)
+		p.statisticalInfo[k] = np
+	}
+
+	return nil
+}
+
+func (p *Parser) recordError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	f, e := os.OpenFile(p.errorLog, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
+	if e != nil {
+		return errors2.WithMessagef(err, "open file %s", p.errorLog)
+	}
+	defer f.Close()
+
+	f.WriteString(err.Error() + "\n")
+	return nil
+}
+
+func (p *Parser) saveStatisticalInfo() error {
+	infos := make([]NumPaths, len(p.statisticalInfo))
+	i := 0
+	for _, v := range p.statisticalInfo {
+		infos[i] = v
+		i++
+	}
+	slices.SortFunc(infos, func(a, b NumPaths) int {
+		return a.Num - b.Num
+	})
+
+	f, err := os.OpenFile(p.statisticSavePath, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0644)
+	if err != nil {
+		errors2.WithMessagef(err, "open file %s", p.statisticSavePath)
+	}
+	defer f.Close()
+
+	if err := json.NewEncoder(f).Encode(infos[:len(infos)/1000]); err != nil {
+		return errors2.WithMessagef(err, "encode statistics data")
+	}
+
+	return nil
+}
+
+func (p *Parser) ReadDeb(deb string) error {
+	defer func() {
+		if e := recover(); e != nil {
+			fmt.Println("panic error:", e)
+		}
+	}()
+
+	f, err := os.Open(deb)
+	if err != nil {
+		return errors2.Wrapf(err, "open file %s", deb)
+	}
+	defer f.Close()
+
+	a := ar.NewReader(f)
+	pkg := new(model.DebPkg)
+	if err := parseDebName(deb, pkg); err != nil {
+		return err
+	}
+	for {
+		h, e := a.Next()
+		if e != nil {
+			break
+		}
+		if strings.Contains(h.Name, "control") {
+			if err := processControl(h.Name, a, pkg); err != nil {
+				return errors2.Wrapf(err, "process control file by %s", pkg.OriginName)
+			}
+		} else if strings.Contains(h.Name, "data") {
+			if err := processData(h.Name, a, pkg); err != nil {
+				return errors2.Wrapf(err, "process data file by %s", pkg.OriginName)
+			}
+		}
+	}
+
+	p.record(pkg, deb)
+
+	return saveInto(pkg, filepath.Join(p.outDir, makeNestDir(deb)))
 }
 
 // analyzeControlFile 解析control文件，获取元数据信息
@@ -178,16 +361,16 @@ func analyzeDataFile(n string, r io.Reader, p *model.DebPkg) error {
 	if p.Hashes == nil {
 		p.Hashes = map[string]string{}
 	}
-	if ok, md5, err := checkElfPe(data); ok {
-		p.Hashes[md5] = n
+	if ok, md5Val, err := checkElf(data); ok {
+		p.Hashes[md5Val] = n
 	} else if err != nil {
 		return errors2.Wrapf(err, "check reader")
 	}
 	return nil
 }
 
-// checkElfPe 检查是否是可执行文件并返回内容便于计算hash值
-func checkElfPe(data []byte) (bool, string, error) {
+// checkElf 检查是否是可执行文件并返回内容便于计算hash值
+func checkElf(data []byte) (bool, string, error) {
 	buffer := make([]byte, 261)
 	copy(buffer, data)
 	t, err := filetype.Get(buffer)
@@ -213,13 +396,12 @@ func saveInto(p *model.DebPkg, path string) error {
 	if p == nil {
 		return errors2.Wrapf(fmt.Errorf("nil pkg"), "save error")
 	}
-	// 缺失关键字段则没必要保存
 	if p.Name == "" || p.Version == "" || len(p.Hashes) == 0 {
 		return nil
 	}
 	if _, err := os.Stat(path); err != nil {
 		if err := os.MkdirAll(path, 0644); err != nil {
-			return errors2.Wrapf(err, "save error")
+			return errors2.Wrapf(err, "mkdir %s", path)
 		}
 	}
 	if p.Architecture == "" {
@@ -227,53 +409,17 @@ func saveInto(p *model.DebPkg, path string) error {
 	} else {
 		path = filepath.Join(path, strings.Join([]string{p.Name, p.Version, p.Architecture}, "_")+".json")
 	}
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return errors2.Wrapf(err, "save path:%s", path)
 	}
 	defer f.Close()
+
 	if err := jsoniter.NewEncoder(f).Encode(p); err != nil {
 		return errors2.Wrapf(err, "save path:%s", path)
 	}
 
 	return nil
-}
-
-// 读取.deb文件
-func readDeb(p string) (*model.DebPkg, error) {
-	defer func() {
-		if e := recover(); e != nil {
-			fmt.Println("panic error:", e)
-		}
-	}()
-
-	f, err := os.Open(p)
-	if err != nil {
-		return nil, errors2.Wrapf(err, "open file %s", p)
-	}
-	defer f.Close()
-
-	a := ar.NewReader(f)
-	pkg := new(model.DebPkg)
-	if err := parseDebName(p, pkg); err != nil {
-		return nil, err
-	}
-	for {
-		h, e := a.Next()
-		if e != nil {
-			break
-		}
-		if strings.Contains(h.Name, "control") {
-			if err := processControl(h.Name, a, pkg); err != nil {
-				return pkg, errors2.Wrapf(err, "process control file by %s", pkg.OriginName)
-			}
-		} else if strings.Contains(h.Name, "data") {
-			if err := processData(h.Name, a, pkg); err != nil {
-				return pkg, errors2.Wrapf(err, "process data file by %s", pkg.OriginName)
-			}
-		}
-	}
-	return pkg, nil
 }
 
 // processControl 解压各个格式的control文件

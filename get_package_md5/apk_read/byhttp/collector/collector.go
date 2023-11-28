@@ -125,6 +125,11 @@ func (c *Collector) iterateAllHrefs(r io.Reader, do func(href string) error) err
 	return nil
 }
 
+func (c *Collector) ProcessTarget() error {
+
+	return nil
+}
+
 func (c *Collector) downloadByTool(u string) error {
 	uu, err := url.Parse(u)
 	if err != nil {

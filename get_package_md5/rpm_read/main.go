@@ -4,15 +4,16 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
+	"github.com/cavaliergopher/cpio"
+	"github.com/ulikunitz/xz"
 	"io"
 	"log"
 	"os"
+	"time"
 
-	"github.com/cavaliergopher/cpio"
 	"github.com/cavaliergopher/rpm"
 	"github.com/h2non/filetype"
 	errors2 "github.com/pkg/errors"
-	"github.com/ulikunitz/xz"
 )
 
 func main() {
@@ -28,10 +29,25 @@ func ExtractRPM(name string) {
 	defer f.Close()
 
 	// Read the package headers
+	start := time.Now()
 	pkg, err := rpm.Read(f)
 	if err != nil {
 		log.Fatal(err)
 	}
+	fmt.Printf("name %s\n", pkg.Name())
+	fmt.Printf("version %s\n", pkg.Version())
+	fmt.Printf("size %d\n", pkg.Size())
+	fmt.Printf("license %s\n", pkg.License())
+	fmt.Printf("packager %s\n", pkg.Packager())
+	fmt.Printf("url %s\n", pkg.URL())
+	fmt.Printf("arch %s\n", pkg.Architecture())
+	fmt.Printf("desc %s\n", pkg.Description())
+	fmt.Printf("src %s\n", pkg.Source())
+	fmt.Printf("src rpm %s\n", pkg.SourceRPM())
+	fmt.Printf("release %s\n", pkg.Release())
+	//for _, file := range pkg.Files() {
+	//	fmt.Printf("filename %s,digest %s\n", file.Name(), file.Digest())
+	//}
 
 	// Check the compression algorithm of the payload
 	if compression := pkg.PayloadCompression(); compression != "xz" {
@@ -66,12 +82,16 @@ func ExtractRPM(name string) {
 			continue
 		}
 
+		//if utils.NoBinary(hdr.Name) {
+		//	continue
+		//}
 		if ok, m, err := check(cpioReader); ok {
 			fmt.Printf("file:%s, md5:%s\n", hdr.Name, m)
 		} else if err != nil {
 			fmt.Println(err)
 		}
 	}
+	fmt.Println("cost time", time.Since(start).String())
 }
 
 func check(r io.Reader) (bool, string, error) {

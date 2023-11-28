@@ -19,6 +19,23 @@ type DebPkg struct {
 	Hashes             map[string]string `json:"hashes,omitempty"`
 }
 
+type ApkPkg struct {
+	PkgName    string   `json:"pkgname,omitempty"`
+	PkgVer     string   `json:"pkgver,omitempty"`
+	PkgDesc    string   `json:"pkgdesc,omitempty"`
+	URL        string   `json:"url,omitempty"`
+	BuildDate  string   `json:"builddate,omitempty"`
+	Packager   string   `json:"packager,omitempty"`
+	Size       string   `json:"size,omitempty"`
+	Arch       string   `json:"arch,omitempty"`
+	Origin     string   `json:"origin,omitempty"`
+	Maintainer string   `json:"maintainer,omitempty"`
+	Replaces   string   `json:"replaces,omitempty"`
+	Depend     []string `json:"depend,omitempty"`
+	License    []string `json:"license,omitempty"`
+	Hashes     []Hash   `json:"hashes,omitempty"`
+}
+
 type License struct {
 	Names []string `json:"names"`
 	Per   float64  `json:"per"`
@@ -66,7 +83,26 @@ func Convert(pkg *DebPkg, mt string) *CommonPkg {
 			v,
 		})
 	}
+	for _, l := range pkg.Licences {
+		if l != nil {
+			cp.License = append(cp.License, RemoveDuplicates(l.Names)...)
+		}
+	}
 	return cp
+}
+
+func RemoveDuplicates(slice []string) []string {
+	encountered := make(map[string]bool)
+	var result []string
+
+	for _, item := range slice {
+		if !encountered[item] {
+			encountered[item] = true
+			result = append(result, item)
+		}
+	}
+
+	return result
 }
 
 func (p *DebPkg) Merge(n *DebPkg) {

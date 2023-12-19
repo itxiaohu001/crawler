@@ -1,12 +1,12 @@
-package main
+package model
 
-// Document 定义了Elasticsearch索引的结构
 type Document struct {
 	Manager            string   `json:"manager"`
 	Name               string   `json:"name"`
 	Source             string   `json:"source"`
-	License            []string `json:"license"` // 现在是字符串数组
+	License            []string `json:"license"`
 	Version            string   `json:"version"`
+	Os                 string   `json:"os"`
 	Architecture       string   `json:"architecture"`
 	Maintainer         string   `json:"maintainer"`
 	OriginalMaintainer string   `json:"originalMaintainer"`
@@ -16,7 +16,6 @@ type Document struct {
 	Hashes             []Hash   `json:"hashes"`
 }
 
-// Hash 代表hashes字段中的结构
 type Hash struct {
 	Key   string `json:"key"`
 	Value string `json:"value"`

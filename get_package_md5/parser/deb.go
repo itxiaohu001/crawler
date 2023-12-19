@@ -17,7 +17,13 @@ func NewDebParser() *Deb {
 	return &Deb{}
 }
 
-func (d *Deb) Parse(r io.Reader, out string) error {
+func (d *Deb) Parse(r io.Reader, out string) (err error) {
+	defer func() {
+		if e := recover(); e != nil {
+			err = errors2.New("panic err")
+		}
+	}()
+
 	pkg := new(model.DebPkg)
 	if err := unarchiver.ReadAr(r, func(n string, r io.Reader) error {
 		if isControl(n) {

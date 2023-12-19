@@ -16,7 +16,6 @@ type Params struct {
 }
 
 func LoadParams() *Params {
-	// todo:支持正则过滤
 	flag.StringVar(&url, "url", "", `下载网址`)
 	flag.IntVar(&delay, "delay", 10, `延迟时间 "单位：100*millisecond"`)
 	flag.Parse()

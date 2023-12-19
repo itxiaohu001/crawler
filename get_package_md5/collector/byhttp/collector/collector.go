@@ -20,11 +20,13 @@ import (
 type Collector struct {
 	httpCli         http.Client
 	parsers         []parser.Parser
-	tool            string
 	sleepDelay      int
+	tool            string
 	historyFilePath string
 	errorFilePath   string
-	historyMap      map[string]struct{}
+	// todo:用lastDir存储最后一次访问的目录，辅助跳过不必要扫描的html
+	lastDir    string
+	historyMap map[string]struct{}
 }
 
 const (
@@ -100,7 +102,7 @@ func (c *Collector) readHtml(url string, resp *http.Response) error {
 		}
 		for _, p := range c.parsers {
 			if p.Check(href) {
-				if err := c.download(nextUrl); err != nil {
+				if err := c.downloadAndParse(nextUrl); err != nil {
 					_ = c.recordError(err)
 				}
 				break
@@ -134,7 +136,7 @@ func (c *Collector) ProcessTarget() error {
 	return nil
 }
 
-func (c *Collector) download(u string) error {
+func (c *Collector) downloadAndParse(u string) error {
 	uu, err := url.Parse(u)
 	if err != nil {
 		return errors.WithMessagef(err, "parse %s", u)
@@ -142,8 +144,10 @@ func (c *Collector) download(u string) error {
 
 	// 跳过下载过的文件
 	if _, ok := c.historyMap[uu.String()]; ok {
+		log.Printf("skip downloaded url %s\n", uu.String())
 		return nil
 	}
+	log.Printf("downloading %s\n", uu.String())
 
 	req, err := http.NewRequest("GET", uu.String(), nil)
 	if err != nil {
@@ -179,6 +183,7 @@ func (c *Collector) download(u string) error {
 	if err := c.record(uu.String()); err != nil {
 		log.Fatal(err)
 	}
+	log.Printf("download %s success\n", uu.String())
 	sleep(c.sleepDelay)
 
 	return nil
@@ -205,12 +210,12 @@ func (c *Collector) recordError(err error) error {
 
 	f, err := os.OpenFile(c.errorFilePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
-		return errors.WithMessagef(err, "open %s", c.historyFilePath)
+		log.Fatal(err)
 	}
 	defer f.Close()
 
 	if _, err := f.WriteString(errStr); err != nil {
-		return errors.WithMessagef(err, "write string to %s", c.errorFilePath)
+		log.Fatal(err)
 	}
 	return nil
 }

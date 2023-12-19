@@ -1,9 +1,10 @@
-package inserter
+package insert
 
 import (
 	"context"
 	"fmt"
 	"get_package_md5/qt2es/model"
+
 	"github.com/olivere/elastic/v7"
 )
 

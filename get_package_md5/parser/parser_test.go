@@ -34,7 +34,7 @@ func TestDeb_Parse(t *testing.T) {
 		//"E:\\tmp\\test\\jabber-querybot_0.1.0-1.1_all.deb",
 		//"E:\\tmp\\test\\jarwrapper_0.72.1~18.04.1_all.deb",
 		//"E:\\tmp\\test\\libjboss-vfs-java_3.2.15.Final-2_all.deb",
-		"E:\\tmp\\test\\libx11-6-udeb_1.6.4-3ubuntu0.4_i386.udeb",
+		"E:\\tmp\\test\\update-manager_22.04.9_all.deb",
 	}
 	for i, path := range fileList {
 		f, err := os.Open(path)

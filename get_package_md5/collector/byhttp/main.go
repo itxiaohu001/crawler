@@ -13,8 +13,7 @@ import (
 func main() {
 	p := flags.LoadParams()
 
-	// todo:完善rpm解析
-	parsers := []parser.Parser{parser.NewApkParser(), parser.NewDebParser(), parser.NewRpm()}
+	parsers := []parser.Parser{parser.NewDebParser(), parser.NewApkParser()}
 	c := collector.NewCollector(DefaultHttpCli(), parsers, p.Delay)
 	if err := c.Visit(p.Url); err != nil {
 		log.Fatal(err)

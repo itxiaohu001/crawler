@@ -3,7 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"get_package_md5/qt2es/inserter"
+	"get_package_md5/qt2es/insert"
 	"get_package_md5/qt2es/model"
 	"io"
 	"log"
@@ -30,12 +30,12 @@ func main() {
 	}
 	defer errFile.Close()
 
-	escli, err := inserter.NewEsCli(args[2])
+	escli, err := insert.NewEsCli(args[2])
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	s := NewSender(escli)
+	s := newSender(escli)
 	qtMap := map[string]model.Document{}
 
 	sc := bufio.NewScanner(f)
@@ -80,20 +80,20 @@ func main() {
 	cout = 0
 	for _, v := range qtMap {
 		v.License = uniqueStrings(v.License)
-		s.Add(v)
-		if s.Ok() {
-			if err := s.Send(); err != nil {
+		s.add(v)
+		if s.ok() {
+			if err := s.send(); err != nil {
 				errFile.WriteString(err.Error() + "\n")
 			}
 			// 防止插入速度过快，给es带来负担
 			time.Sleep(time.Second * 1)
-			s.Reset()
+			s.reset()
 		}
 		cout++
 	}
 
 	if s.notEmpty() {
-		if err := s.Send(); err != nil {
+		if err := s.send(); err != nil {
 			errFile.WriteString(err.Error() + "\n")
 		}
 	}
@@ -114,41 +114,41 @@ func uniqueStrings(strings []string) []string {
 	return result
 }
 
-// Max 一次插入五百条数据
-const Max = 500
+// maxInsert 一次插入五百条数据
+const maxInsert = 500
 
-type Sender struct {
-	es      *inserter.EsCli
+type sender struct {
+	es      *insert.EsCli
 	qtInfos []model.Document
 	l       int
 }
 
-func NewSender(cli *inserter.EsCli) *Sender {
-	return &Sender{
+func newSender(cli *insert.EsCli) *sender {
+	return &sender{
 		es:      cli,
 		qtInfos: []model.Document{},
 		l:       0,
 	}
 }
 
-func (s *Sender) Ok() bool {
-	return s.l >= Max
+func (s *sender) ok() bool {
+	return s.l >= maxInsert
 }
 
-func (s *Sender) Reset() {
+func (s *sender) reset() {
 	s.qtInfos = nil
 	s.l = 0
 }
 
-func (s *Sender) Add(info model.Document) {
+func (s *sender) add(info model.Document) {
 	s.qtInfos = append(s.qtInfos, info)
 	s.l++
 }
 
-func (s *Sender) Send() error {
+func (s *sender) send() error {
 	return s.es.Insert(s.qtInfos)
 }
 
-func (s *Sender) notEmpty() bool {
+func (s *sender) notEmpty() bool {
 	return s.l > 0
 }

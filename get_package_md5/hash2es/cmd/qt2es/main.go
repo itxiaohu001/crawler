@@ -3,8 +3,8 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"get_package_md5/qt2es/insert"
-	"get_package_md5/qt2es/model"
+	"get_package_md5/hash2es/insert"
+	"get_package_md5/model"
 	"io"
 	"log"
 	"os"

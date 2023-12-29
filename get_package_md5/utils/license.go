@@ -2,10 +2,11 @@ package utils
 
 import (
 	"get_package_md5/model"
-	"github.com/google/licensecheck"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/google/licensecheck"
 )
 
 var (

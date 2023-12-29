@@ -6,9 +6,10 @@ import (
 	"get_package_md5/model"
 	"get_package_md5/unarchiver"
 	"get_package_md5/utils"
-	errors2 "github.com/pkg/errors"
 	"io"
 	"strings"
+
+	errors2 "github.com/pkg/errors"
 )
 
 type Deb struct{}

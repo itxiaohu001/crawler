@@ -13,7 +13,7 @@ import (
 func main() {
 	p := flags.LoadParams()
 
-	parsers := []parser.Parser{parser.NewDebParser(), parser.NewApkParser()}
+	parsers := []parser.Parser{parser.NewDebParser(), parser.NewApkParser(), parser.NewRpmParser()}
 	c := collector.NewCollector(DefaultHttpCli(), parsers, p.Delay)
 	if err := c.Visit(p.Url); err != nil {
 		log.Fatal(err)

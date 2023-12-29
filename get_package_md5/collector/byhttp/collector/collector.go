@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"get_package_md5/parser"
-	"github.com/pkg/errors"
 	"io"
 	"log"
 	"math/rand"
@@ -15,6 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 type Collector struct {
@@ -24,9 +25,8 @@ type Collector struct {
 	tool            string
 	historyFilePath string
 	errorFilePath   string
-	// todo:用lastDir存储最后一次访问的目录，辅助跳过不必要扫描的html
-	lastDir    string
-	historyMap map[string]struct{}
+	lastDir         string
+	historyMap      map[string]struct{}
 }
 
 const (
@@ -97,13 +97,17 @@ func (c *Collector) readHtml(url string, resp *http.Response) error {
 		nextUrl := strings.TrimSuffix(url, "/") + "/" + href
 		if isDirHref(href) {
 			if err := c.Visit(nextUrl); err != nil {
-				_ = c.recordError(err)
+				if err := c.recordError(err); err != nil {
+					log.Fatal(err)
+				}
 			}
 		}
 		for _, p := range c.parsers {
 			if p.Check(href) {
 				if err := c.downloadAndParse(nextUrl); err != nil {
-					_ = c.recordError(err)
+					if err := c.recordError(err); err != nil {
+						log.Fatal(err)
+					}
 				}
 				break
 			}
@@ -114,8 +118,13 @@ func (c *Collector) readHtml(url string, resp *http.Response) error {
 
 func (c *Collector) iterateAllHrefs(r io.Reader, do func(href string) error) error {
 	scanner := bufio.NewScanner(r)
+	var lines []string
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
+		lines = append(lines, line)
+	}
+
+	for _, line := range lines {
 		if strings.HasPrefix(line, `<a href="`) {
 			left := strings.Index(line, `="`) + 2
 			right := strings.Index(line, `">`)
@@ -128,11 +137,6 @@ func (c *Collector) iterateAllHrefs(r io.Reader, do func(href string) error) err
 			}
 		}
 	}
-	return nil
-}
-
-func (c *Collector) ProcessTarget() error {
-
 	return nil
 }
 
@@ -218,10 +222,6 @@ func (c *Collector) recordError(err error) error {
 		log.Fatal(err)
 	}
 	return nil
-}
-
-func isTargetHref(p, suffix string) bool {
-	return strings.HasSuffix(p, suffix)
 }
 
 func isDirHref(p string) bool {

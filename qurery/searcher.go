@@ -2,6 +2,7 @@ package qurery
 
 import (
 	esv7 "github.com/elastic/go-elasticsearch/v7"
+	esv8 "github.com/elastic/go-elasticsearch/v8"
 	"github.com/pkg/errors"
 )
 
@@ -53,6 +54,18 @@ func NewSearcher(option ...Option) (*Searcher, error) {
 
 func newSearch(c *Config) (Search, error) {
 	switch c.Version {
+	case Es8:
+		cli, err := esv8.NewClient(esv8.Config{
+			Addresses: c.Address,
+			Username:  c.Username,
+			Password:  c.Password,
+		})
+		if err != nil {
+			return nil, err
+		}
+		search := new(V8)
+		search.cli = cli
+		return search, nil
 	default:
 		cli, err := esv7.NewClient(esv7.Config{
 			Addresses: c.Address,
@@ -62,7 +75,7 @@ func newSearch(c *Config) (Search, error) {
 		if err != nil {
 			return nil, err
 		}
-		search := new(v7)
+		search := new(V7)
 		search.cli = cli
 		return search, nil
 	}

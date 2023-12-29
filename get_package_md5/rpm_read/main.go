@@ -9,6 +9,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/cavaliergopher/cpio"
+	"github.com/ulikunitz/xz"
+
 	"github.com/cavaliergopher/rpm"
 	"github.com/h2non/filetype"
 	errors2 "github.com/pkg/errors"
@@ -49,52 +52,48 @@ func ExtractRPM(name string) {
 		fmt.Println(req.Name())
 	}
 
-	//for _, file := range pkg.Files() {
-	//	fmt.Printf("filename %s,digest %s\n", file.Name(), file.Digest())
-	//}
+	//Check the compression algorithm of the payload
+	if compression := pkg.PayloadCompression(); compression != "xz" {
+		log.Fatalf("Unsupported compression: %s", compression)
+	}
 
-	// Check the compression algorithm of the payload
-	//if compression := pkg.PayloadCompression(); compression != "xz" {
-	//	log.Fatalf("Unsupported compression: %s", compression)
-	//}
-	//
-	//// Attach a reader to decompress the payload
-	//xzReader, err := xz.NewReader(f)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//
-	//// Check the archive format of the payload
-	//if format := pkg.PayloadFormat(); format != "cpio" {
-	//	log.Fatalf("Unsupported payload format: %s", format)
-	//}
-	//
-	//// Attach a reader to unarchive each file in the payload
-	//cpioReader := cpio.NewReader(xzReader)
-	//for {
-	//	// Move to the next file in the archive
-	//	hdr, err := cpioReader.Next()
-	//	if err == io.EOF {
-	//		break // no more files
-	//	}
-	//	if err != nil {
-	//		log.Fatal(err)
-	//	}
-	//
-	//	// Skip directories and other irregular file types in this example
-	//	if !hdr.FileInfo().Mode().IsRegular() {
-	//		continue
-	//	}
-	//
-	//	//if utils.NoBinary(hdr.Name) {
-	//	//	continue
-	//	//}
-	//	if ok, m, err := check(cpioReader); ok {
-	//		fmt.Printf("file:%s, md5:%s\n", hdr.Name, m)
-	//	} else if err != nil {
-	//		fmt.Println(err)
-	//	}
-	//}
+	// Attach a reader to decompress the payload
+	xzReader, err := xz.NewReader(f)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Check the archive format of the payload
+	if format := pkg.PayloadFormat(); format != "cpio" {
+		log.Fatalf("Unsupported payload format: %s", format)
+	}
+
+	// Attach a reader to unarchive each file in the payload
+	cpioReader := cpio.NewReader(xzReader)
+	for {
+		// Move to the next file in the archive
+		hdr, err := cpioReader.Next()
+		if err == io.EOF {
+			break // no more files
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// Skip directories and other irregular file types in this example
+		if !hdr.FileInfo().Mode().IsRegular() {
+			continue
+		}
+
+		//if utils.NoBinary(hdr.Name) {
+		//	continue
+		//}
+		if ok, m, err := check(cpioReader); ok {
+			fmt.Printf("file:%s, md5:%s\n", hdr.Name, m)
+		} else if err != nil {
+			fmt.Println(err)
+		}
+	}
 	fmt.Println("cost time", time.Since(start).String())
 }
 

@@ -4,12 +4,13 @@ import (
 	"archive/tar"
 	"compress/bzip2"
 	"compress/gzip"
+	"io"
+
 	"github.com/blakesmith/ar"
 	"github.com/cavaliergopher/cpio"
 	"github.com/klauspost/compress/zstd"
 	"github.com/ulikunitz/xz"
 	"github.com/ulikunitz/xz/lzma"
-	"io"
 )
 
 type ReadFunc func(r io.Reader, do func(n string, r io.Reader) error) error

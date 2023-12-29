@@ -1,6 +1,26 @@
 package model
 
+type RpmPkg struct {
+	Epoch              int      `json:"epoch,omitempty"`
+	OS                 string   `json:"os,omitempty"`
+	Vendor             string   `json:"vendor,omitempty"`
+	Release            string   `json:"release,omitempty"`
+	Manager            string   `json:"manager,omitempty"`
+	Name               string   `json:"name,omitempty"`
+	Source             string   `json:"source,omitempty"`
+	Version            string   `json:"version,omitempty"`
+	Architecture       string   `json:"architecture,omitempty"`
+	Maintainer         string   `json:"maintainer,omitempty"`
+	OriginalMaintainer string   `json:"originalMaintainer,omitempty"`
+	Homepage           string   `json:"homepage,omitempty"`
+	Description        string   `json:"description,omitempty"`
+	Depends            []string `json:"depends,omitempty"`
+	License            []string `json:"license,omitempty"`
+	Hashes             []Hash   `json:"hashes,omitempty"`
+}
+
 type DebPkg struct {
+	OS                 string            `json:"os,omitempty"`
 	OriginName         string            `json:"originName,omitempty"`
 	Name               string            `json:"name,omitempty"`
 	Source             string            `json:"source,omitempty"`
@@ -20,6 +40,7 @@ type DebPkg struct {
 }
 
 type ApkPkg struct {
+	OS         string   `json:"OS,omitempty"`
 	PkgName    string   `json:"pkgname,omitempty"`
 	PkgVer     string   `json:"pkgver,omitempty"`
 	PkgDesc    string   `json:"pkgdesc,omitempty"`
@@ -55,11 +76,6 @@ type CommonPkg struct {
 	Depends            []string `json:"depends"`
 	License            []string `json:"license"`
 	Hashes             []Hash   `json:"hashes"`
-}
-
-type Hash struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
 }
 
 func Convert(pkg *DebPkg, mt string) *CommonPkg {

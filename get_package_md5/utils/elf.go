@@ -3,9 +3,10 @@ package utils
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"strings"
+
 	"github.com/h2non/filetype"
 	errors2 "github.com/pkg/errors"
-	"strings"
 )
 
 var nonBinaryFileExtensions = []string{".txt", ".csv", ".xml", ".json", ".html", ".md", ".yml", ".yaml", ".ini", ".conf", ".bat", ".sh", ".py", ".java", ".cpp", ".js", ".go", ".h", ".c"}

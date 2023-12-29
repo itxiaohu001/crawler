@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"fmt"
 	"get_package_md5/model"
-	jsoniter "github.com/json-iterator/go"
-	"github.com/pkg/errors"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	jsoniter "github.com/json-iterator/go"
+	"github.com/pkg/errors"
 )
 
 type ClientV2 struct {

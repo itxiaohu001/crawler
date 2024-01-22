@@ -27,10 +27,10 @@ func (d *Deb) Parse(r io.Reader, out string) (err error) {
 
 	pkg := new(model.DebPkg)
 	if err := unarchiver.ReadAr(r, func(n string, r io.Reader) error {
-		if isControl(n) {
-			return parseControl(n, r, pkg)
-		} else if isData(n) {
-			return parseData(n, r, pkg)
+		if IsControl(n) {
+			return ParseControl(n, r, pkg)
+		} else if IsData(n) {
+			return ParseData(n, r, pkg)
 		}
 		return nil
 	}); err != nil {
@@ -47,20 +47,20 @@ func (d *Deb) Check(n string) bool {
 		strings.HasSuffix(n, ".udeb")
 }
 
-func parseControl(name string, r io.Reader, pkg *model.DebPkg) error {
+func ParseControl(name string, r io.Reader, pkg *model.DebPkg) error {
 	var readFunc unarchiver.ReadFunc
 
-	if strings.HasSuffix(name, "control.tar.zst") {
+	if strings.Contains(name, "control.tar.zst") {
 		readFunc = unarchiver.ReadTarZst
-	} else if strings.HasSuffix(name, "control.tar.xz") {
+	} else if strings.Contains(name, "control.tar.xz") {
 		readFunc = unarchiver.ReadTarXz
-	} else if strings.HasSuffix(name, "control.tar.gz") {
+	} else if strings.Contains(name, "control.tar.gz") {
 		readFunc = unarchiver.ReadTarGzip
-	} else if strings.HasSuffix(name, "control.tar") {
+	} else if strings.Contains(name, "control.tar") {
 		readFunc = unarchiver.ReadTar
-	} else if strings.HasSuffix(name, "control.tar.bz2") {
+	} else if strings.Contains(name, "control.tar.bz2") {
 		readFunc = unarchiver.ReadTarBz2
-	} else if strings.HasSuffix(name, "control.tar.lzma") {
+	} else if strings.Contains(name, "control.tar.lzma") {
 		readFunc = unarchiver.ReadTarLzma
 	} else {
 		return fmt.Errorf("unexpected format %s", name)
@@ -71,12 +71,12 @@ func parseControl(name string, r io.Reader, pkg *model.DebPkg) error {
 	})
 }
 
-func parseData(name string, r io.Reader, pkg *model.DebPkg) error {
+func ParseData(name string, r io.Reader, pkg *model.DebPkg) error {
 	var readFunc unarchiver.ReadFunc
 
 	if strings.HasSuffix(name, "data.tar.zst") {
 		readFunc = unarchiver.ReadTarZst
-	} else if strings.HasSuffix(name, "data.tar.xz") {
+	} else if strings.Contains(name, "data.tar.xz") {
 		readFunc = unarchiver.ReadTarXz
 	} else if strings.HasSuffix(name, "data.tar.gz") {
 		readFunc = unarchiver.ReadTarGzip
@@ -180,10 +180,10 @@ func analyzeDataFile(n string, r io.Reader, p *model.DebPkg) error {
 	return nil
 }
 
-func isControl(n string) bool {
+func IsControl(n string) bool {
 	return strings.Contains(n, "control")
 }
 
-func isData(n string) bool {
+func IsData(n string) bool {
 	return strings.Contains(n, "data")
 }

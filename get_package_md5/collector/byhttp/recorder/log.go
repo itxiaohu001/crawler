@@ -1,8 +1,11 @@
 package recorder
 
 import (
+	"bufio"
 	"fmt"
+	"log"
 	"os"
+	"strings"
 	"sync"
 )
 
@@ -12,6 +15,7 @@ type AccessRecorder struct {
 	wg              sync.WaitGroup
 	file            *os.File
 	errorFile       *os.File
+	historyMap      map[string]struct{}
 }
 
 func NewAccessRecorder(filePath, errorFilePath string) (*AccessRecorder, error) {
@@ -22,7 +26,11 @@ func NewAccessRecorder(filePath, errorFilePath string) (*AccessRecorder, error) 
 
 	errorFile, err := os.OpenFile(errorFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		file.Close()
+		return nil, err
+	}
+
+	historyMap, err := readHistory(filePath)
+	if err != nil {
 		return nil, err
 	}
 
@@ -31,6 +39,7 @@ func NewAccessRecorder(filePath, errorFilePath string) (*AccessRecorder, error) 
 		errorRecordChan: make(chan string, 100),
 		file:            file,
 		errorFile:       errorFile,
+		historyMap:      historyMap,
 	}
 
 	logger.wg.Add(2)
@@ -38,6 +47,13 @@ func NewAccessRecorder(filePath, errorFilePath string) (*AccessRecorder, error) 
 	go logger.processErrorRecords()
 
 	return logger, nil
+}
+
+func (l *AccessRecorder) Exist(url string) bool {
+	if _, ok := l.historyMap[url]; ok {
+		return ok
+	}
+	return false
 }
 
 func (l *AccessRecorder) Record(url string) {
@@ -74,4 +90,21 @@ func (l *AccessRecorder) Close() error {
 		return err
 	}
 	return l.errorFile.Close()
+}
+
+func readHistory(logPath string) (map[string]struct{}, error) {
+	f, err := os.OpenFile(logPath, os.O_RDWR|os.O_CREATE, 0644)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	history := map[string]struct{}{}
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		history[strings.TrimSpace(sc.Text())] = struct{}{}
+	}
+	log.Printf("%d historical records in all\n", len(history))
+
+	return history, nil
 }

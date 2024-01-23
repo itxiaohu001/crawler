@@ -2,8 +2,8 @@ package collector
 
 import (
 	"bufio"
-	"get_package_md5/collector/recorder"
-	"get_package_md5/collector/sleeper"
+	"get_package_md5/collector/byhttp/recorder"
+	"get_package_md5/collector/byhttp/sleeper"
 	"get_package_md5/parser"
 	"io"
 	"log"
@@ -24,19 +24,15 @@ type Collector struct {
 	pool       *pool.Pool
 	parsers    []parser.Parser
 	sleeper    *sleeper.Sleeper
-	// 初始写入历史记录之后不会再写入，只会并发读
-	HistoryMap map[string]struct{}
 }
 
-func NewCollector(httpCli http.Client, parsers []parser.Parser,
-	history map[string]struct{}, logger *recorder.AccessRecorder,
+func NewCollector(httpCli http.Client, parsers []parser.Parser, logger *recorder.AccessRecorder,
 	pool *pool.Pool, sleeper *sleeper.Sleeper) *Collector {
 
 	return &Collector{
 		pool:       pool,
 		HTTPClient: httpCli,
 		sleeper:    sleeper,
-		HistoryMap: history,
 		parsers:    parsers,
 		Recorder:   logger,
 	}
@@ -131,13 +127,13 @@ func (c *Collector) DownloadAndParse(u string) error {
 		return errors.WithMessagef(err, "parse %s", u)
 	}
 
-	if _, ok := c.HistoryMap[uu.String()]; ok {
+	if c.Recorder.Exist(uu.String()) {
 		log.Printf("skip downloaded url %s\n", uu.String())
 		return nil
 	}
 	log.Printf("downloading %s\n", uu.String())
 
-	c.sleeper.Sleep()
+	// c.sleeper.Sleep()
 
 	req, err := http.NewRequest("GET", uu.String(), nil)
 	if err != nil {

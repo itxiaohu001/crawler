@@ -1,11 +1,9 @@
 package recorder
 
 import (
-	"bufio"
-	"fmt"
+	"github.com/syndtr/goleveldb/leveldb"
 	"log"
 	"os"
-	"strings"
 	"sync"
 )
 
@@ -13,23 +11,17 @@ type AccessRecorder struct {
 	recordChannel   chan string
 	errorRecordChan chan string
 	wg              sync.WaitGroup
-	file            *os.File
 	errorFile       *os.File
-	historyMap      map[string]struct{}
+	db              *leveldb.DB
 }
 
-func NewAccessRecorder(filePath, errorFilePath string) (*AccessRecorder, error) {
-	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+func NewAccessRecorder(cache string) (*AccessRecorder, error) {
+	db, err := leveldb.OpenFile(cache, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	errorFile, err := os.OpenFile(errorFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return nil, err
-	}
-
-	historyMap, err := readHistory(filePath)
+	errorFile, err := os.OpenFile("error.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil, err
 	}
@@ -37,9 +29,8 @@ func NewAccessRecorder(filePath, errorFilePath string) (*AccessRecorder, error) 
 	logger := &AccessRecorder{
 		recordChannel:   make(chan string, 100),
 		errorRecordChan: make(chan string, 100),
-		file:            file,
 		errorFile:       errorFile,
-		historyMap:      historyMap,
+		db:              db,
 	}
 
 	logger.wg.Add(2)
@@ -50,8 +41,13 @@ func NewAccessRecorder(filePath, errorFilePath string) (*AccessRecorder, error) 
 }
 
 func (l *AccessRecorder) Exist(url string) bool {
-	if _, ok := l.historyMap[url]; ok {
-		return ok
+	if ok, err := l.db.Has([]byte(url), nil); ok {
+		return true
+	} else if err != nil {
+		if err != leveldb.ErrNotFound {
+			log.Println("Error searching from db:", err)
+		}
+		return false
 	}
 	return false
 }
@@ -67,8 +63,8 @@ func (l *AccessRecorder) RecordError(errorMessage string) {
 func (l *AccessRecorder) processRecords() {
 	defer l.wg.Done()
 	for record := range l.recordChannel {
-		if _, err := l.file.WriteString(record + "\n"); err != nil {
-			fmt.Println("Error writing to file:", err)
+		if err := l.db.Put([]byte(record), []byte{0}, nil); err != nil {
+			log.Println("Error writing to db:", err)
 		}
 	}
 }
@@ -77,7 +73,7 @@ func (l *AccessRecorder) processErrorRecords() {
 	defer l.wg.Done()
 	for record := range l.errorRecordChan {
 		if _, err := l.errorFile.WriteString(record + "\n"); err != nil {
-			fmt.Println("Error writing to error file:", err)
+			log.Println("Error writing to error file:", err)
 		}
 	}
 }
@@ -86,25 +82,8 @@ func (l *AccessRecorder) Close() error {
 	close(l.recordChannel)
 	close(l.errorRecordChan)
 	l.wg.Wait() // 等待所有记录都被处理完
-	if err := l.file.Close(); err != nil {
+	if err := l.db.Close(); err != nil {
 		return err
 	}
 	return l.errorFile.Close()
-}
-
-func readHistory(logPath string) (map[string]struct{}, error) {
-	f, err := os.OpenFile(logPath, os.O_RDWR|os.O_CREATE, 0644)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	history := map[string]struct{}{}
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		history[strings.TrimSpace(sc.Text())] = struct{}{}
-	}
-	log.Printf("%d historical records in all\n", len(history))
-
-	return history, nil
 }
